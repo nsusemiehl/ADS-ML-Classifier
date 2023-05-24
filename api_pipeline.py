@@ -104,8 +104,7 @@ class ml_doc_classifier:
         # range_query = f"submittedDate:{range_str}"
 
         base_url = "http://export.arxiv.org/api/query?"
-        full_query = f"search_query={range_query}&max_results={9999}"
-        # full_query = f"search_query=%28astro-ph.GA+OR+astro-ph.CO+OR+astro-ph.EP+OR+astro-ph.HE+OR+astro-ph.IM+OR+astro-ph.SR%29+AND+{range_query}&max_results={9999}"
+        full_query = f"search_query=%28astro-ph.GA+OR+astro-ph.CO+OR+astro-ph.EP+OR+astro-ph.HE+OR+astro-ph.IM+OR+astro-ph.SR%29+AND+{range_query}&max_results={9999}"
         url = base_url + full_query
 
         response = urlopen(url).read()
@@ -126,21 +125,19 @@ class ml_doc_classifier:
 
     def ads_api_call(self, date_query):
         if type(self.start_day) == int:
-            if self.start_day < 10:
+            if int(self.start_day) < 10:
                 self.start_day = f"0{self.start_day}"
-            if self.start_month < 10:
+            if int(self.start_month) < 10:
                 self.start_month = f"0{self.start_month}"
-            if self.end_day < 10:
+            if int(self.end_day) < 10:
                 self.end_day = f"0{self.end_day}"
-            if self.end_month < 10:
+            if int(self.end_month) < 10:
                 self.end_month = f"0{self.end_month}"
 
         if date_query == "entdate":
-            encoded_query = urlencode({"q": f"entdate:[{self.start_year}-{self.start_month}-{self.start_day} TO {self.end_year}-{self.end_month}-{self.end_day}]", "fl": "bibcode, identifier, title", "rows": 9999})
-            # encoded_query = urlencode({"q": f"entdate:[{start_year}-{start_month}-{start_day} TO {end_year}-{end_month}-{end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
+            encoded_query = urlencode({"q": f"entdate:[{self.start_year}-{self.start_month}-{self.start_day} TO {self.end_year}-{self.end_month}-{self.end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
         elif date_query == "metadata_mtime":
-            encoded_query = urlencode({"q": f"metadata_mtime:[{self.start_year}-{self.start_month}-{self.start_day}T00\:00\:00.000Z TO {self.end_year}-{self.end_month}-{self.end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "rows": 9999})
-            # encoded_query = urlencode({"q": f"metadata_mtime:[{start_year}-{start_month}-{start_day}T00\:00\:00.000Z TO {end_year}-{end_month}-{end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
+            encoded_query = urlencode({"q": f"metadata_mtime:[{self.start_year}-{self.start_month}-{self.start_day}T00\:00\:00.000Z TO {self.end_year}-{self.end_month}-{self.end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
 
 
         results = requests.get("https://api.adsabs.harvard.edu/v1/search/query?{}".format(encoded_query), headers={'Authorization': 'Bearer ' + self.ADS_DEV_KEY}).json()["response"]["docs"]
@@ -408,7 +405,7 @@ def main():
     start_day = int(start_date[4:6])
 
     end_date = args.enddate[0]
-    end_year = end_date[0:6]
+    end_year = end_date[0:2]
     end_year = int("20" + end_year)
     end_month = int(end_date[2:4])    
     end_day = int(end_date[4:6])
@@ -445,23 +442,23 @@ def main():
         ml_clf.ads_api_call(date_query="metadata_mtime")
         print("Number of results after second ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
 
-        ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles)
-        ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles)
-        print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
+        # ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles)
+        # ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles)
+        # print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
 
-        convert_start = time.time()
-        paper_texts = ml_clf.convert_pdfs_to_text()
-        print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
-        convert_duration = (time.time() - convert_start)/60
-        print("convert duration (mins):", convert_duration)
+        # convert_start = time.time()
+        # paper_texts = ml_clf.convert_pdfs_to_text()
+        # print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
+        # convert_duration = (time.time() - convert_start)/60
+        # print("convert duration (mins):", convert_duration)
 
-        if len(ml_clf.converted_ids) > 0:
-            X = ml_clf.doc2vec(paper_texts)
-            ea_probs = ml_clf.classifier(X)
-            output = ml_clf.return_results(ea_probs)
+        # if len(ml_clf.converted_ids) > 0:
+        #     X = ml_clf.doc2vec(paper_texts)
+        #     ea_probs = ml_clf.classifier(X)
+        #     output = ml_clf.return_results(ea_probs)
 
-        all_duration = (time.time() - all_start)/60
-        print("total duration (mins):", all_duration)
+        # all_duration = (time.time() - all_start)/60
+        # print("total duration (mins):", all_duration)
 
     else:
 
