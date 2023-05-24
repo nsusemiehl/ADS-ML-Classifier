@@ -30,10 +30,12 @@ import ads
 import urllib3
 from urllib.parse import urlencode, quote_plus
 import argparse
+from progress.bar import Bar
 
 class ml_doc_classifier:
     def __init__(self, start_day, start_month, start_year, end_day, end_month, end_year, output_type, rerun=False):
-
+        """ Add doc string
+        """
         # user gives start + end dates
         # note to user: api calls at 12:00am (00:00:00 HH:MM:ss) of days
         # allow user to change hour?
@@ -46,10 +48,10 @@ class ml_doc_classifier:
         self.end_year = end_year
 
         # prepare directories to store paper ids and pdfs (ids need to be saved long term, pdfs do not)
-        self.root_directory = f".//data//api pipeline//"
+        self.root_directory = f".//data//api_pipeline//"
         if not os.path.exists(self.root_directory):
             os.makedirs(self.root_directory)
-        self.sub_directory = f"{self.root_directory}{start_month}-{start_day}-{start_year} -- {end_month}-{end_day}-{end_year}//"
+        self.sub_directory = f"{self.root_directory}{start_year[2:]}{start_month}{start_day}_{end_year[2:]}{end_month}{end_day}//"
         if not os.path.exists(self.sub_directory):
             os.makedirs(self.sub_directory)
 
@@ -94,17 +96,16 @@ class ml_doc_classifier:
         self.output_type = output_type
 
     def arxiv_api_call(self):
-        start_date = datetime(self.start_year, self.start_month, self.start_day)
-        end_date = datetime(self.end_year, self.end_month, self.end_day)
-
-        start = start_date.strftime("%Y%m%d")
-        end = end_date.strftime("%Y%m%d")
+        """ Add doc string
+        """
+        start =  f"{self.start_year}{self.start_month}{self.start_day}" #start_date.strftime("%Y%m%d")
+        end = f"{self.end_year}{self.end_month}{self.end_day}" #end_date.strftime("%Y%m%d")
         range_str = f"[{start}000000+TO+{end}000000]"
         range_query = f"lastUpdatedDate:{range_str}"
         # range_query = f"submittedDate:{range_str}"
 
         base_url = "http://export.arxiv.org/api/query?"
-        full_query = f"search_query=%28astro-ph.GA+OR+astro-ph.CO+OR+astro-ph.EP+OR+astro-ph.HE+OR+astro-ph.IM+OR+astro-ph.SR%29+AND+{range_query}&max_results={9999}"
+        full_query = f"search_query=%28astro-ph.GA+OR+astro-ph.CO+OR+astro-ph.EP+OR+astro-ph.HE+OR+astro-ph.IM+OR+astro-ph.SR%29+AND+{range_query}&max_results={999}"
         url = base_url + full_query
 
         response = urlopen(url).read()
@@ -124,6 +125,8 @@ class ml_doc_classifier:
 
 
     def ads_api_call(self, date_query):
+        """ Add doc string
+        """
         if type(self.start_day) == int:
             if int(self.start_day) < 10:
                 self.start_day = f"0{self.start_day}"
@@ -174,6 +177,8 @@ class ml_doc_classifier:
                         self.all_titles.append(paper["title"][0])
 
     def download_pdfs(self, source, ids, titles):
+        """ Add doc string
+        """
         for id_, title in zip(ids, titles):
             # print(id_)
             if source == "arxiv":
@@ -190,60 +195,60 @@ class ml_doc_classifier:
                 pdf_link1 = f"https://ui.adsabs.harvard.edu/link_gateway/{id_}/pub_pdf"
                 pdf_link2 = f"https://ui.adsabs.harvard.edu/link_gateway/{id_}/eprint_pdf"
 
-            session = requests.Session()
-            retry = Retry(connect=3, backoff_factor=10)
-            adapter = HTTPAdapter(max_retries=retry)
-            session.mount('http://', adapter)
-            session.mount('https://', adapter)
+                session = requests.Session()
+                retry = Retry(connect=3, backoff_factor=10)
+                adapter = HTTPAdapter(max_retries=retry)
+                session.mount('http://', adapter)
+                session.mount('https://', adapter)
 
-            filename = f'{id_}.pdf'.replace("/", "")
-            full_filename = self.sub_directory + filename
+                filename = f'{id_}.pdf'.replace("/", "")
+                full_filename = self.sub_directory + filename
 
-            # i think i hit a rate limit after downloading ~2000 pdfs
+                # i think i hit a rate limit after downloading ~2000 pdfs
 
-            # make sure pdfs are not downloaded twice
-            files = os.listdir(self.sub_directory) # could go outside loop but if i keep it in it can triple check that a duplicate file isnt downloaded
+                # make sure pdfs are not downloaded twice
+                files = os.listdir(self.sub_directory) # could go outside loop but if i keep it in it can triple check that a duplicate file isnt downloaded
 
-            if filename in files: # file was already downloaded
-                file_size = os.path.getsize(full_filename)
-                if file_size > 40000: # file was downloaded successfully
-                    self.downloaded_ids.append(id_)
-                    self.downloaded_titles.append(title)
-                    # print("already downloaded and good")
-                    continue
-                else:
-                    # print("already downloaded but bad")
-                    pass
+                if filename in files: # file was already downloaded
+                    file_size = os.path.getsize(full_filename)
+                    if file_size > 40000: # file was downloaded successfully
+                        self.downloaded_ids.append(id_)
+                        self.downloaded_titles.append(title)
+                        continue
+                    else:
+                        pass
 
-            # download the pdfs
-            response = session.get(pdf_link1, headers=headers)
-            with open(full_filename, 'wb') as f:
-                f.write(response.content)
+                # download the pdfs
+                response = session.get(pdf_link1, headers=headers)
+                with open(full_filename, 'wb') as f:
+                    f.write(response.content)
 
-            try:
-                file_size = os.path.getsize(full_filename) # this would throw an error if nothing was downloaded
-                # sometimes calls to the arxiv api using "export" in the url fail but succeed if "export" is not in the url
-                # in this case a corrupt pdf with a small file size is downloaded instead
-                if file_size < 40000:
-                    # print("just downloaded and bad")
+                try:
+                    file_size = os.path.getsize(full_filename) # this would throw an error if nothing was downloaded
+                    # sometimes calls to the arxiv api using "export" in the url fail but succeed if "export" is not in the url
+                    # in this case a corrupt pdf with a small file size is downloaded instead
+                    if file_size < 40000:
+                        response = session.get(pdf_link2, headers=headers)
+                        with open(full_filename, 'wb') as f:
+                            f.write(response.content)
+                except:
                     response = session.get(pdf_link2, headers=headers)
                     with open(full_filename, 'wb') as f:
                         f.write(response.content)
-            except:
-                response = session.get(pdf_link2, headers=headers)
-                # print("first download failed")
-                with open(full_filename, 'wb') as f:
-                    f.write(response.content)
-                pass
+                    pass
 
-            # final check to see if paper downloaded successfully 
-            if file_size > 40000:
-                self.downloaded_ids.append(id_)
-                self.downloaded_titles.append(title)
-            else:
-                self.bad_ids.append(id_)
+                # final check to see if paper downloaded successfully 
+                if file_size > 40000:
+                    self.downloaded_ids.append(id_)
+                    self.downloaded_titles.append(title)
+                else:
+                    self.bad_ids.append(id_)
+
+                bar.next()
 
     def convert_pdfs_to_text(self):
+        """ Add doc string
+        """
         paper_texts = []
         for id_, title in zip(self.downloaded_ids, self.downloaded_titles): 
             # filename could be arxiv id or ads bibcode
@@ -295,6 +300,8 @@ class ml_doc_classifier:
         return paper_texts
 
     def doc2vec(self, paper_texts):
+        """ Add doc string
+        """
         # doc2vec time
         def tokenize_text(text):
             stopWords = set(stopwords.words('english'))
@@ -314,6 +321,8 @@ class ml_doc_classifier:
         return X
 
     def classifier(self, X):
+        """ Add doc string
+        """
         # classifier
         classifier_path=".//models//classifiers//lr.sav"
         classifier = pickle.load(open(classifier_path, 'rb'))
@@ -324,6 +333,8 @@ class ml_doc_classifier:
         return ea_probs
 
     def return_results(self, ea_probs):
+        """ Add doc string
+        """
         # sort results
         sorted_ea_probs = sorted(ea_probs, reverse=True)
         sorted_ids = [paper for prob, paper in sorted(zip(ea_probs, self.converted_ids), reverse=True)]
@@ -363,13 +374,14 @@ class ml_doc_classifier:
             return df.to_html()
         
         elif self.output_type == 'struct':
-            struct_string = struct_string = '[struct stat="OK", query_type="GET_REFERENCES", num_rows="17", references_json="/work/TMP_FJk12o_17209/TransitView/2023.05.18_14.22.23_013043/references.json"]'
+            struct_string = f'[struct stat="OK", num_papers="{len(sorted_ea_probs)}", references_json="/work/TMP_FJk12o_17209/TransitView/2023.05.18_14.22.23_013043/references.json"]'
 
             return struct_string
 
 def main():
-
-    # python api_pipeline.py --startdate 052123 --enddate 052223
+    """ Add doc string
+    """
+    # python api_pipeline.py --startdate 230521 --enddate 230522 --verbose 1
     parser = argparse.ArgumentParser(description="Input start & end dates")
 
     parser.add_argument("--startdate",
@@ -383,7 +395,7 @@ def main():
                             type=str,
                             nargs=1,
                             help="Set end date like 'YYMMDD'")
-    
+
     parser.add_argument("--output_type",
                         metavar="Output Type",
                         type=str,
@@ -392,7 +404,7 @@ def main():
                         help="Whether to output results as 'html', 'struct', or 'text'")
     
     parser.add_argument("--rerun",
-                            metavar="Debug Mode",
+                            metavar="Rerun Mode",
                             type=bool,
                             nargs=1,
                             default=True,
@@ -405,20 +417,29 @@ def main():
                             default=False,
                             help="Turn off scraping/converting/inference to test outputs")
 
+    parser.add_argument("--verbose",
+                            metavar="Verbose Mode",
+                            type=bool,
+                            nargs=1,
+                            default=False,
+                            help="Print what's happening ...",
+                            dest="verbose")
+
     args = parser.parse_args()
     print(args)
 
+    # Parse dates but keep as strings
     start_date = args.startdate[0]
     start_year = start_date[0:2]
-    start_year = int("20" + start_year)
-    start_month = int(start_date[2:4])
-    start_day = int(start_date[4:6])
+    start_year = "20" + start_year
+    start_month = start_date[2:4]
+    start_day = start_date[4:6]
 
     end_date = args.enddate[0]
     end_year = end_date[0:2]
-    end_year = int("20" + end_year)
-    end_month = int(end_date[2:4])    
-    end_day = int(end_date[4:6])
+    end_year = "20" + end_year
+    end_month = end_date[2:4]
+    end_day = end_date[4:6]
 
     if type(args.rerun) == list:
         rerun = args.rerun[0]
@@ -436,28 +457,39 @@ def main():
 
 
     if not debug:
+        if args.verbose:
+            print(f"Range: {start_year}{start_month}{start_day} - {end_year}{end_month}{end_day}")
+
         ml_clf = ml_doc_classifier(start_day, start_month, start_year, end_day, end_month, end_year, output_type=output_type, rerun=rerun)
 
         all_start = time.time()
 
         ml_clf.arxiv_api_call()
-        print("Number of results after first arXiv query:", len(ml_clf.arxiv_ids))
+        if args.verbose:
+            print("Number of results after first arXiv query:", len(ml_clf.arxiv_ids))
 
-        ml_clf.ads_api_call(date_query="entdate")
-        print("Number of results after first ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
+        encoded_query = urlencode({"q": f"entdate:[{start_year}-{start_month}-{start_day} TO {end_year}-{end_month}-{end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
+        ml_clf.ads_api_call(encoded_query)
+        if args.verbose:
+            print("Number of results after first ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
 
-        ml_clf.ads_api_call(date_query="metadata_mtime")
-        print("Number of results after second ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
+        encoded_query = urlencode({"q": f"metadata_mtime:[{start_year}-{start_month}-{start_day}T00\:00\:00.000Z TO {end_year}-{end_month}-{end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
+        ml_clf.ads_api_call(encoded_query)
+        if args.verbose:
+            print("Number of results after second ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
 
-        ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles)
-        ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles)
-        print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
+        ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles, args.verbose)
+        ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles, args.verbose)
+        if args.verbose:
+            print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
 
         convert_start = time.time()
         paper_texts = ml_clf.convert_pdfs_to_text()
-        print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
+        if args.verbose:
+            print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
         convert_duration = (time.time() - convert_start)/60
-        print("convert duration (mins):", convert_duration)
+        if args.verbose:
+            print("convert duration (mins):", convert_duration)
 
         if len(ml_clf.converted_ids) > 0:
             X = ml_clf.doc2vec(paper_texts)
@@ -467,7 +499,7 @@ def main():
         all_duration = (time.time() - all_start)/60
         print("total duration (mins):", all_duration)
 
-    else:
+    else: # debug
 
         sorted_ids = [1,2,3]
         sorted_titles = ["a", "b", "c"]
