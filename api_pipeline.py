@@ -135,12 +135,15 @@ class ml_doc_classifier:
                 self.end_month = f"0{self.end_month}"
 
         if date_query == "entdate":
-            encoded_query = urlencode({"q": f"entdate:[{self.start_year}-{self.start_month}-{self.start_day} TO {self.end_year}-{self.end_month}-{self.end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
+            encoded_query = urlencode({"q": f"entdate:[{self.start_year}-{self.start_month}-{self.start_day} TO {self.end_year}-{self.end_month}-{self.end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy, property:article, property:(refereed OR eprint_openaccess), abs:(planet OR exoplanet OR extrasolar OR brown OR Jupiter OR Neptune OR TESS OR K2 OR Kepler -asteroid)", "rows": 9999})
         elif date_query == "metadata_mtime":
-            encoded_query = urlencode({"q": f"metadata_mtime:[{self.start_year}-{self.start_month}-{self.start_day}T00\:00\:00.000Z TO {self.end_year}-{self.end_month}-{self.end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
+            encoded_query = urlencode({"q": f"metadata_mtime:[{self.start_year}-{self.start_month}-{self.start_day}T00\:00\:00.000Z TO {self.end_year}-{self.end_month}-{self.end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy, property:article, property:(refereed OR eprint_openaccess), abs:(planet OR exoplanet OR extrasolar OR brown OR Jupiter OR Neptune OR TESS OR K2 OR Kepler -asteroid)", "rows": 9999})
 
 
         results = requests.get("https://api.adsabs.harvard.edu/v1/search/query?{}".format(encoded_query), headers={'Authorization': 'Bearer ' + self.ADS_DEV_KEY}).json()["response"]["docs"]
+
+        if len(results) == 2000:
+            print("Maximum number of ADS results exceeded")
 
         for paper in results:
             identifiers = paper["identifier"]
@@ -172,6 +175,7 @@ class ml_doc_classifier:
 
     def download_pdfs(self, source, ids, titles):
         for id_, title in zip(ids, titles):
+            # print(id_)
             if source == "arxiv":
                 headers = {
                 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36',
@@ -205,8 +209,10 @@ class ml_doc_classifier:
                 if file_size > 40000: # file was downloaded successfully
                     self.downloaded_ids.append(id_)
                     self.downloaded_titles.append(title)
+                    # print("already downloaded and good")
                     continue
                 else:
+                    # print("already downloaded but bad")
                     pass
 
             # download the pdfs
@@ -219,11 +225,13 @@ class ml_doc_classifier:
                 # sometimes calls to the arxiv api using "export" in the url fail but succeed if "export" is not in the url
                 # in this case a corrupt pdf with a small file size is downloaded instead
                 if file_size < 40000:
+                    # print("just downloaded and bad")
                     response = session.get(pdf_link2, headers=headers)
                     with open(full_filename, 'wb') as f:
                         f.write(response.content)
             except:
                 response = session.get(pdf_link2, headers=headers)
+                # print("first download failed")
                 with open(full_filename, 'wb') as f:
                     f.write(response.content)
                 pass
@@ -333,22 +341,23 @@ class ml_doc_classifier:
             html_link = f"<a href='{link}'>{title}</a>"
             sorted_html_links.append(html_link)
 
-        # store these for future retraining
-        # with open(f'{self.root_directory}all_existing_results.txt', 'a', encoding="utf-8") as f:
-        #     for id_, prob in zip(sorted_ids, sorted_ea_probs):
-        #         if id_ not in self.existing_arxiv_ids and id_ not in self.existing_ads_bibs:
-        #             f.write(f"{id_},{prob}\n")
+        if self.output_type == "text":
+            # store these for future retraining
+            with open(f'{self.root_directory}all_existing_results.txt', 'a', encoding="utf-8") as f:
+                for id_, prob in zip(sorted_ids, sorted_ea_probs):
+                    if id_ not in self.existing_arxiv_ids and id_ not in self.existing_ads_bibs:
+                        f.write(f"{id_},{prob}\n")
 
-        # output to user
-        # with open(f'{self.sub_directory}results.txt', 'w', encoding="utf-8") as f:
-        #     for title, prob, html_link in zip(sorted_titles, sorted_ea_probs, sorted_html_links):
-        #         # f.write(f"{round(prob,3)} | {title} | {link}\n")
-        #         f.write(f"{round(prob,3)} | {html_link}\n")
-        # with open(f'{self.sub_directory}bad_ids.txt', 'w', encoding="utf-8") as f:
-        #     for id_, in self.bad_ids:
-        #         f.write(f"{id_}\n")
+            # output to user
+            with open(f'{self.sub_directory}results.txt', 'w', encoding="utf-8") as f:
+                for title, prob, html_link in zip(sorted_titles, sorted_ea_probs, sorted_html_links):
+                    # f.write(f"{round(prob,3)} | {title} | {link}\n")
+                    f.write(f"{round(prob,3)} | {html_link}\n")
+            with open(f'{self.sub_directory}bad_ids.txt', 'w', encoding="utf-8") as f:
+                for id_, in self.bad_ids:
+                    f.write(f"{id_}\n")
 
-        if self.output_type == 'html':
+        elif self.output_type == 'html':
             df = pd.DataFrame({"EA Prob":sorted_ea_probs, "Paper Title/Link":sorted_html_links})
             
             return df.to_html()
@@ -379,8 +388,8 @@ def main():
                         metavar="Output Type",
                         type=str,
                         nargs=1,
-                        default='html',
-                        help="Whether to output results as 'html' or 'struct'")
+                        default='text',
+                        help="Whether to output results as 'html', 'struct', or 'text'")
     
     parser.add_argument("--rerun",
                             metavar="Debug Mode",
@@ -397,6 +406,7 @@ def main():
                             help="Turn off scraping/converting/inference to test outputs")
 
     args = parser.parse_args()
+    print(args)
 
     start_date = args.startdate[0]
     start_year = start_date[0:2]
@@ -426,9 +436,6 @@ def main():
 
 
     if not debug:
-        print(start_day, start_month, start_year)
-        print(end_day, end_month, end_year)
-
         ml_clf = ml_doc_classifier(start_day, start_month, start_year, end_day, end_month, end_year, output_type=output_type, rerun=rerun)
 
         all_start = time.time()
@@ -442,23 +449,23 @@ def main():
         ml_clf.ads_api_call(date_query="metadata_mtime")
         print("Number of results after second ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
 
-        # ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles)
-        # ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles)
-        # print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
+        ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles)
+        ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles)
+        print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
 
-        # convert_start = time.time()
-        # paper_texts = ml_clf.convert_pdfs_to_text()
-        # print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
-        # convert_duration = (time.time() - convert_start)/60
-        # print("convert duration (mins):", convert_duration)
+        convert_start = time.time()
+        paper_texts = ml_clf.convert_pdfs_to_text()
+        print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
+        convert_duration = (time.time() - convert_start)/60
+        print("convert duration (mins):", convert_duration)
 
-        # if len(ml_clf.converted_ids) > 0:
-        #     X = ml_clf.doc2vec(paper_texts)
-        #     ea_probs = ml_clf.classifier(X)
-        #     output = ml_clf.return_results(ea_probs)
+        if len(ml_clf.converted_ids) > 0:
+            X = ml_clf.doc2vec(paper_texts)
+            ea_probs = ml_clf.classifier(X)
+            output = ml_clf.return_results(ea_probs)
 
-        # all_duration = (time.time() - all_start)/60
-        # print("total duration (mins):", all_duration)
+        all_duration = (time.time() - all_start)/60
+        print("total duration (mins):", all_duration)
 
     else:
 

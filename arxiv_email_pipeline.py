@@ -29,7 +29,7 @@ import re
 
 start = time.time()
 
-date = "05-21-23"
+date = "05-23-23"
 directory = f".//data//arxiv emails//{date}//" # change manually
 
 # read in email from arxiv
