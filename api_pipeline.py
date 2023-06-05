@@ -30,7 +30,7 @@ import ads
 import urllib3
 from urllib.parse import urlencode, quote_plus
 import argparse
-from progress.bar import Bar
+# from progress.bar import Bar
 
 class ml_doc_classifier:
     def __init__(self, start_day, start_month, start_year, end_day, end_month, end_year, output_type, rerun=False):
@@ -46,6 +46,26 @@ class ml_doc_classifier:
         self.end_day = end_day
         self.end_month = end_month
         self.end_year = end_year
+
+        # if type(self.start_day) == int:
+        #     if int(self.start_day) < 10:
+        #         self.start_day = f"0{self.start_day}"
+        #     if int(self.start_month) < 10:
+        #         self.start_month = f"0{self.start_month}"
+        #     if int(self.end_day) < 10:
+        #         self.end_day = f"0{self.end_day}"
+        #     if int(self.end_month) < 10:
+        #         self.end_month = f"0{self.end_month}"
+
+        # elif type(self.start_day) == str:
+        #     if len(self.start_day) == 1:
+        #         self.start_day = f"0{self.start_day}"
+        #     if len(self.start_month) == 1:
+        #         self.start_month = f"0{self.start_month}"
+        #     if len(self.end_day) == 1:
+        #         self.end_day = f"0{self.end_day}"
+        #     if len(self.end_month) == 1:
+        #         self.end_month = f"0{self.end_month}"
 
         # prepare directories to store paper ids and pdfs (ids need to be saved long term, pdfs do not)
         self.root_directory = f".//data//api_pipeline//"
@@ -63,7 +83,7 @@ class ml_doc_classifier:
         self.existing_ads_bibs = []
 
         # try:
-        with open(f'{self.root_directory}all_existing_results.txt', 'r') as f:
+        with open(f'{self.root_directory}all_existing_results.txt', 'a+') as f:
             for line in f:
                 # line should be "id,prob\n"
                 line = line.strip()
@@ -98,21 +118,25 @@ class ml_doc_classifier:
     def arxiv_api_call(self):
         """ Add doc string
         """
+
         start =  f"{self.start_year}{self.start_month}{self.start_day}" #start_date.strftime("%Y%m%d")
         end = f"{self.end_year}{self.end_month}{self.end_day}" #end_date.strftime("%Y%m%d")
-        range_str = f"[{start}000000+TO+{end}000000]"
+        range_str = f"[{start}000000+TO+{end}000000]" # single digit dates must be 0-padded
         range_query = f"lastUpdatedDate:{range_str}"
         # range_query = f"submittedDate:{range_str}"
 
         base_url = "http://export.arxiv.org/api/query?"
-        full_query = f"search_query=%28astro-ph.GA+OR+astro-ph.CO+OR+astro-ph.EP+OR+astro-ph.HE+OR+astro-ph.IM+OR+astro-ph.SR%29+AND+{range_query}&max_results={999}"
+        full_query = f"search_query=%28astro-ph.GA+OR+astro-ph.CO+OR+astro-ph.EP+OR+astro-ph.HE+OR+astro-ph.IM+OR+astro-ph.SR%29+AND+{range_query}&max_results={9999}"
         url = base_url + full_query
 
         response = urlopen(url).read()
         feed = feedparser.parse(response)
 
+        api_results = []
+
         for e in feed.entries:
             arxiv_id = re.sub("v\d+$", "", e.id.split("/")[-1]) # e.id looks like 'http://arxiv.org/abs/2301.05335v2'
+            api_results.append(arxiv_id)
             if (arxiv_id not in self.arxiv_ids) and (e.title not in self.all_titles):
                 if self.rerun: 
                     self.arxiv_ids.append(arxiv_id)
@@ -123,30 +147,25 @@ class ml_doc_classifier:
                     self.arxiv_titles.append(e.title.strip("\n"))
                     self.all_titles.append(e.title.strip("\n"))
 
+        return api_results
 
     def ads_api_call(self, date_query):
         """ Add doc string
         """
-        if type(self.start_day) == int:
-            if int(self.start_day) < 10:
-                self.start_day = f"0{self.start_day}"
-            if int(self.start_month) < 10:
-                self.start_month = f"0{self.start_month}"
-            if int(self.end_day) < 10:
-                self.end_day = f"0{self.end_day}"
-            if int(self.end_month) < 10:
-                self.end_month = f"0{self.end_month}"
 
+        # single digit dates must be 0-padded
         if date_query == "entdate":
-            encoded_query = urlencode({"q": f"entdate:[{self.start_year}-{self.start_month}-{self.start_day} TO {self.end_year}-{self.end_month}-{self.end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy, property:article, property:(refereed OR eprint_openaccess), abs:(planet OR exoplanet OR extrasolar OR brown OR Jupiter OR Neptune OR TESS OR K2 OR Kepler -asteroid)", "rows": 9999})
+            encoded_query = urlencode({"q": f"entdate:[{self.start_year}-{self.start_month}-{self.start_day} TO {self.end_year}-{self.end_month}-{self.end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy, property:article, property:(refereed OR eprint_openaccess), abs:(planet OR exoplanet OR extrasolar OR brown OR Jupiter OR Neptune OR TESS OR K2 OR Kepler OR TOI OR KOI OR OGLE OR KMT OR EPIC OR MOA)", "rows": 9999})
         elif date_query == "metadata_mtime":
-            encoded_query = urlencode({"q": f"metadata_mtime:[{self.start_year}-{self.start_month}-{self.start_day}T00\:00\:00.000Z TO {self.end_year}-{self.end_month}-{self.end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy, property:article, property:(refereed OR eprint_openaccess), abs:(planet OR exoplanet OR extrasolar OR brown OR Jupiter OR Neptune OR TESS OR K2 OR Kepler -asteroid)", "rows": 9999})
+            encoded_query = urlencode({"q": f"metadata_mtime:[{self.start_year}-{self.start_month}-{self.start_day}T00\:00\:00.000Z TO {self.end_year}-{self.end_month}-{self.end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy, property:article, property:(refereed OR eprint_openaccess), abs:(planet OR exoplanet OR extrasolar OR brown OR Jupiter OR Neptune OR TESS OR K2 OR Kepler OR TOI OR KOI OR OGLE OR KMT OR EPIC OR MOA)", "rows": 9999})
 
 
         results = requests.get("https://api.adsabs.harvard.edu/v1/search/query?{}".format(encoded_query), headers={'Authorization': 'Bearer ' + self.ADS_DEV_KEY}).json()["response"]["docs"]
 
         if len(results) == 2000:
             print("Maximum number of ADS results exceeded")
+
+        api_results = []
 
         for paper in results:
             identifiers = paper["identifier"]
@@ -155,6 +174,7 @@ class ml_doc_classifier:
             for id_ in identifiers:
                 if id_[:6] == "arXiv:": # in ads, arxiv ids look like 'arXiv:2302.07880'; this might not work as intended if a paper has multiple arxiv ids but i dont think thats possible
                     found_arxiv_id = True
+                    api_results.append(id_[6:])
                     if (id_[6:] not in self.arxiv_ids) and (paper["title"] not in self.all_titles):
                         if self.rerun:
                             self.arxiv_ids.append(id_[6:])
@@ -176,6 +196,10 @@ class ml_doc_classifier:
                         self.ads_titles.append(paper["title"][0])
                         self.all_titles.append(paper["title"][0])
 
+            api_results.append(paper["bibcode"])
+
+        return api_results
+
     def download_pdfs(self, source, ids, titles):
         """ Add doc string
         """
@@ -195,56 +219,70 @@ class ml_doc_classifier:
                 pdf_link1 = f"https://ui.adsabs.harvard.edu/link_gateway/{id_}/pub_pdf"
                 pdf_link2 = f"https://ui.adsabs.harvard.edu/link_gateway/{id_}/eprint_pdf"
 
-                session = requests.Session()
-                retry = Retry(connect=3, backoff_factor=10)
-                adapter = HTTPAdapter(max_retries=retry)
-                session.mount('http://', adapter)
-                session.mount('https://', adapter)
+            session = requests.Session()
+            retry = Retry(connect=3, backoff_factor=10)
+            adapter = HTTPAdapter(max_retries=retry)
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
 
-                filename = f'{id_}.pdf'.replace("/", "")
-                full_filename = self.sub_directory + filename
+            filename = f'{id_}.pdf'.replace("/", "")
+            full_filename = self.sub_directory + filename
 
-                # i think i hit a rate limit after downloading ~2000 pdfs
+            # i think i hit a rate limit after downloading ~2000 pdfs
 
-                # make sure pdfs are not downloaded twice
-                files = os.listdir(self.sub_directory) # could go outside loop but if i keep it in it can triple check that a duplicate file isnt downloaded
+            # make sure pdfs are not downloaded twice
+            files = os.listdir(self.sub_directory) # could go outside loop but if i keep it in it can triple check that a duplicate file isnt downloaded
+            file_size = None
 
-                if filename in files: # file was already downloaded
-                    file_size = os.path.getsize(full_filename)
-                    if file_size > 40000: # file was downloaded successfully
-                        self.downloaded_ids.append(id_)
-                        self.downloaded_titles.append(title)
-                        continue
-                    else:
-                        pass
+            if filename in files: # file was already downloaded
+                file_size = os.path.getsize(full_filename)
+                if file_size > 40000: # file was downloaded successfully
+                    self.downloaded_ids.append(id_)
+                    self.downloaded_titles.append(title)
+                    continue
+                else:
+                    pass
 
-                # download the pdfs
+            # download the pdfs
+            try:
                 response = session.get(pdf_link1, headers=headers)
                 with open(full_filename, 'wb') as f:
                     f.write(response.content)
+            except:
+                pass
 
-                try:
-                    file_size = os.path.getsize(full_filename) # this would throw an error if nothing was downloaded
-                    # sometimes calls to the arxiv api using "export" in the url fail but succeed if "export" is not in the url
-                    # in this case a corrupt pdf with a small file size is downloaded instead
-                    if file_size < 40000:
+            if os.path.isfile(full_filename):
+                file_size = os.path.getsize(full_filename) 
+                # sometimes calls to the arxiv api using "export" in the url fail but succeed if "export" is not in the url
+                # in this case a corrupt pdf with a small file size is downloaded instead
+                if file_size < 40000:
+                    try:
                         response = session.get(pdf_link2, headers=headers)
                         with open(full_filename, 'wb') as f:
                             f.write(response.content)
-                except:
+                    except:
+                        pass
+            else:
+                try:
                     response = session.get(pdf_link2, headers=headers)
                     with open(full_filename, 'wb') as f:
                         f.write(response.content)
+                except:
                     pass
+                if os.path.isfile(full_filename):
+                    file_size = os.path.getsize(full_filename)
 
-                # final check to see if paper downloaded successfully 
+            # final check to see if paper downloaded successfully 
+            if file_size is not None:
                 if file_size > 40000:
                     self.downloaded_ids.append(id_)
                     self.downloaded_titles.append(title)
                 else:
                     self.bad_ids.append(id_)
+            else:
+                self.bad_ids.append(id_)
 
-                bar.next()
+                # bar.next()
 
     def convert_pdfs_to_text(self):
         """ Add doc string
@@ -335,6 +373,7 @@ class ml_doc_classifier:
     def return_results(self, ea_probs):
         """ Add doc string
         """
+        # bad_ids should be printed out alongside titles
         # sort results
         sorted_ea_probs = sorted(ea_probs, reverse=True)
         sorted_ids = [paper for prob, paper in sorted(zip(ea_probs, self.converted_ids), reverse=True)]
@@ -365,7 +404,7 @@ class ml_doc_classifier:
                     # f.write(f"{round(prob,3)} | {title} | {link}\n")
                     f.write(f"{round(prob,3)} | {html_link}\n")
             with open(f'{self.sub_directory}bad_ids.txt', 'w', encoding="utf-8") as f:
-                for id_, in self.bad_ids:
+                for id_ in self.bad_ids:
                     f.write(f"{id_}\n")
 
         elif self.output_type == 'html':
@@ -450,50 +489,66 @@ def main():
         debug = args.debug[0]
     else:
         debug = args.debug
+
     if type(args.output_type) == list:
         output_type = args.output_type[0]
     else:
         output_type = args.output_type
 
+    if type(args.verbose) == list:
+        verbose = args.verbose[0]
+    else:
+        verbose = args.verbose
+
 
     if not debug:
-        if args.verbose:
-            print(f"Range: {start_year}{start_month}{start_day} - {end_year}{end_month}{end_day}")
+        if verbose:
+            print(f"Range: {start_year}/{start_month}/{start_day} - {end_year}/{end_month}/{end_day}")
 
         ml_clf = ml_doc_classifier(start_day, start_month, start_year, end_day, end_month, end_year, output_type=output_type, rerun=rerun)
 
         all_start = time.time()
 
         ml_clf.arxiv_api_call()
-        if args.verbose:
+        if verbose:
             print("Number of results after first arXiv query:", len(ml_clf.arxiv_ids))
 
-        encoded_query = urlencode({"q": f"entdate:[{start_year}-{start_month}-{start_day} TO {end_year}-{end_month}-{end_day}]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
-        ml_clf.ads_api_call(encoded_query)
-        if args.verbose:
+        ml_clf.ads_api_call("entdate")
+        if verbose:
             print("Number of results after first ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
 
-        encoded_query = urlencode({"q": f"metadata_mtime:[{start_year}-{start_month}-{start_day}T00\:00\:00.000Z TO {end_year}-{end_month}-{end_day}T00\:00\:00.000Z]", "fl": "bibcode, identifier, title", "fq": "database:astronomy", "rows": 9999})
-        ml_clf.ads_api_call(encoded_query)
-        if args.verbose:
+        ml_clf.ads_api_call("metadata_mtime")
+        if verbose:
             print("Number of results after second ADS query:", len(ml_clf.arxiv_ids)+len(ml_clf.ads_bibs))
 
-        ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles, args.verbose)
-        ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles, args.verbose)
-        if args.verbose:
+        download_start = time.time()
+        ml_clf.download_pdfs("arxiv", ml_clf.arxiv_ids, ml_clf.arxiv_titles)
+        ml_clf.download_pdfs("ads", ml_clf.ads_bibs, ml_clf.ads_titles)
+        download_duration = (time.time() - download_start)/60 
+        if verbose:
+            print("download duration (mins):", download_duration)
             print("Number of PDFs successfully downloaded:", len(ml_clf.downloaded_ids))
 
         convert_start = time.time()
         paper_texts = ml_clf.convert_pdfs_to_text()
-        if args.verbose:
-            print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
         convert_duration = (time.time() - convert_start)/60
-        if args.verbose:
+        if verbose:
             print("convert duration (mins):", convert_duration)
+            print("Number of PDFs successfully converted to text:", len(ml_clf.converted_ids))
 
         if len(ml_clf.converted_ids) > 0:
+            doc2vec_start = time.time()
             X = ml_clf.doc2vec(paper_texts)
+            doc2vec_duration = (time.time() - doc2vec_start)/60
+            if verbose:
+                print("doc2vec duration (mins):", doc2vec_duration)
+
+            inference_start = time.time()
             ea_probs = ml_clf.classifier(X)
+            inference_duration = (time.time() - inference_start)/60
+            if verbose:
+                print("inference duration (mins):", inference_duration)
+            
             output = ml_clf.return_results(ea_probs)
 
         all_duration = (time.time() - all_start)/60
@@ -521,3 +576,49 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# python api_pipeline.py --startdate 230301 --enddate 230302 --verbose 1
+# Number of results after first arXiv query: 82
+# Number of results after first ADS query: 84
+# Number of results after second ADS query: 235
+# download duration (mins): 13.801348316669465
+# Number of PDFs successfully downloaded: 228
+# convert duration (mins): 13.493611121177674
+# Number of PDFs successfully converted to text: 224
+# doc2vec duration (mins): 1.451873509089152
+# inference duration (mins): 0.00011666218439737956
+# 28.8
+
+# python api_pipeline.py --startdate 230402 --enddate 230403 --verbose 1
+# Number of results after first arXiv query: 24
+# Number of results after first ADS query: 33
+# Number of results after second ADS query: 296
+# download duration (mins): 16.318849154313405
+# Number of PDFs successfully downloaded: 272
+# FloatObject (b'0.00-42771595') invalid; use 0.0 instead
+# convert duration (mins): 22.463578081130983
+# Number of PDFs successfully converted to text: 271
+# doc2vec duration (mins): 1.91994602282842
+# inference duration (mins): 0.00024393796920776367
+# total duration (mins): 40.76192534764608
+
+# python api_pipeline.py --startdate 230320 --enddate 230321 --verbose 1
+# Number of results after first arXiv query: 85
+# Number of results after first ADS query: 87
+# Number of results after second ADS query: 690
+# download duration (mins): 7.026944736639659
+# Number of PDFs successfully downloaded: 551
+#  impossible to decode XFormObject /Im101
+# Multiple definitions in dictionary at byte 0x2b8cbc for key /Rotate
+# Multiple definitions in dictionary at byte 0x2b8d86 for key /Rotate
+# Multiple definitions in dictionary at byte 0x2b8e50 for key /Rotate
+# Multiple definitions in dictionary at byte 0x2b8f1a for key /Rotate
+# Multiple definitions in dictionary at byte 0x2b8fe4 for key /Rotate
+# Multiple definitions in dictionary at byte 0x2b90ae for key /Rotate
+# FloatObject (b'0.00000000000-11368684') invalid; use 0.0 instead
+# FloatObject (b'0.00000000000-11368684') invalid; use 0.0 instead
+# convert duration (mins): 37.67474456230799
+# Number of PDFs successfully converted to text: 549
+# doc2vec duration (mins): 3.6725465099016827
+# inference duration (mins): 0.0005276242891947429
+# total duration (mins): 48.44829435348511
