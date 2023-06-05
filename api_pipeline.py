@@ -110,6 +110,7 @@ class ml_doc_classifier:
         self.converted_titles = []
 
         self.bad_ids = []
+        self.bad_titles = []
 
         self.ADS_DEV_KEY = "FEbkvybqpxpJQdeF5E8btv7KvfFM4Eh5ezHV7Z8S"
 
@@ -279,8 +280,10 @@ class ml_doc_classifier:
                     self.downloaded_titles.append(title)
                 else:
                     self.bad_ids.append(id_)
+                    self.bad_titles.append(title)
             else:
                 self.bad_ids.append(id_)
+                self.bad_titles.append(title)
 
                 # bar.next()
 
@@ -297,6 +300,7 @@ class ml_doc_classifier:
             except:
                 if id_ not in self.bad_ids:
                     self.bad_ids.append(id_)
+                    self.bad_titles.append(title)
                 continue
 
             paper_text = ""
@@ -311,6 +315,7 @@ class ml_doc_classifier:
                     paper_good = False
                     if id_ not in self.bad_ids:
                         self.bad_ids.append(id_)
+                        self.bad_titles.append(title)
                     continue
 
         # i dont think this is needed anymore but ill keep it here just in case
@@ -333,6 +338,7 @@ class ml_doc_classifier:
                 paper_good = False
                 if id_ not in self.bad_ids:
                     self.bad_ids.append(id_)
+                    self.bad_titles.append(title)
                 continue
 
         return paper_texts
@@ -391,6 +397,17 @@ class ml_doc_classifier:
             html_link = f"<a href='{link}'>{title}</a>"
             sorted_html_links.append(html_link)
 
+        bad_paper_html_links = []
+        for title, id_ in zip(self.bad_titles, self.bad_ids):
+            if re.search("^\d+\.\d+$", id_) is not None:
+                link = f"https://arxiv.org/abs/{id_}"
+                html_link = f"<a href='{link}'>{title}</a>"
+                bad_paper_html_links.append(f"NA | {html_link}\n")
+            else:
+                link = f"https://ui.adsabs.harvard.edu/abs/{id_}/abstract"
+                html_link = f"<a href='{link}'>{title}</a>"
+                bad_paper_html_links.append(f"NA | {html_link}\n")
+
         if self.output_type == "text":
             # store these for future retraining
             with open(f'{self.root_directory}all_existing_results.txt', 'a', encoding="utf-8") as f:
@@ -403,12 +420,17 @@ class ml_doc_classifier:
                 for title, prob, html_link in zip(sorted_titles, sorted_ea_probs, sorted_html_links):
                     # f.write(f"{round(prob,3)} | {title} | {link}\n")
                     f.write(f"{round(prob,3)} | {html_link}\n")
-            with open(f'{self.sub_directory}bad_ids.txt', 'w', encoding="utf-8") as f:
-                for id_ in self.bad_ids:
-                    f.write(f"{id_}\n")
+                for link in bad_paper_html_links:
+                    f.write(f"NA | {link}\n")
+
+            # with open(f'{self.sub_directory}bad_ids.txt', 'w', encoding="utf-8") as f:
+            #     for id_ in self.bad_ids:
+            #         f.write(f"{id_}\n")
 
         elif self.output_type == 'html':
-            df = pd.DataFrame({"EA Prob":sorted_ea_probs, "Paper Title/Link":sorted_html_links})
+            df1 = pd.DataFrame({"EA Prob":sorted_ea_probs, "Paper Title/Link":sorted_html_links})
+            df2 = pd.DataFrame({"EA Prob": np.repeat("NA", len(bad_paper_html_links)), "Paper Title/Link":bad_paper_html_links})
+            df = pd.concat([df1, df2])
             
             return df.to_html()
         
